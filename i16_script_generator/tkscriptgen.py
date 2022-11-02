@@ -237,7 +237,8 @@ class LoopGen:
 
 class ScriptGenerator:
     """
-
+    ScriptGenerator GUI
+    Python code editor with special features for I16 scripts
     """
 
     def __init__(self, filename='', script_string=SCRIPT, parent=None):
@@ -302,7 +303,7 @@ class ScriptGenerator:
         left.pack(side=tk.LEFT, expand=tk.YES, fill=tk.BOTH)
 
         frm = ttk.LabelFrame(left, text='Insert', relief=tk.RIDGE)
-        frm.pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH, padx=5, pady=5)
+        frm.pack(side=tk.TOP, padx=5, pady=5)
 
         var = tk.Button(frm, text='Loop...', command=self.btn_loop,
                         font=BF, bg=btn, activebackground=btn_active)
@@ -313,17 +314,17 @@ class ScriptGenerator:
         var.pack(side=tk.TOP, fill=tk.X, padx=2, pady=6)
 
         # Small buttons
-        small = ttk.Frame(frm)
-        small.pack(side=tk.TOP, expand=tk.YES, fill=tk.X)
+        small = ttk.Frame(left)
+        small.pack(side=tk.TOP)
 
         var = tk.Button(small, text='>>', command=self.btn_tabin,
-                        font=["Times", 6], bg=btn, activebackground=btn_active)
+                        font=["Times", 8], bg=btn, activebackground=btn_active)
         var.pack(side=tk.LEFT, padx=2, pady=2)
         var = tk.Button(small, text='<<', command=self.btn_tabback,
-                        font=["Times", 6], bg=btn, activebackground=btn_active)
+                        font=["Times", 8], bg=btn, activebackground=btn_active)
         var.pack(side=tk.LEFT, padx=2, pady=2)
         var = tk.Button(small, text='#', command=self.btn_comment,
-                        font=["Times", 6], bg=btn, activebackground=btn_active)
+                        font=["Times", 8], bg=btn, activebackground=btn_active)
         var.pack(side=tk.LEFT, padx=2, pady=2)
 
         "----------- MIDDLE RIGHT - Textbox -----------"

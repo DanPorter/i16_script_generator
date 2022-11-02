@@ -12,7 +12,7 @@ Diamond Light Source Ltd.
 #### Usage:
 Start the GUI from a terminal
 ```text
-$ python -m i16_script_generator.py
+$ python -m i16_script_generator
 ```
 Or, start the window from another tkinter GUI
 
@@ -28,8 +28,8 @@ For comments, queries or bugs - email [dan.porter@diamond.ac.uk](mailto:dan.port
 
 # Installation
 **Requirements:** 
-Python 3+ with packages: *Numpy*, *Tkinter*.
-BuiltIn packages used: *sys*, *os*, *re*
+Python 3+ with packages: *Numpy*.
+BuiltIn packages used: *sys*, *os*, *re*, *datetime*, *Tkinter*, *ttk*
 
 
 Download latest version from GitHub, then run the file
