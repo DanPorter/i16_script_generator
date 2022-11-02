@@ -16,5 +16,5 @@ Diamond Light Source Ltd.
 2022
 """
 if __name__ == '__main__':
-    from i16_script_generator import ScanGenerator
-    ScanGenerator()
+    from i16_script_generator import ScanGenerator, ScriptGenerator
+    ScriptGenerator()

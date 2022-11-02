@@ -6,180 +6,16 @@ By Dan Porter, PhD
 Diamond Light Source Ltd
 2022
 """
-import re
 import tkinter as tk
 from tkinter import ttk
-import datetime
 
 from i16_script_generator.params import SCANNABLES, DETECTORS, EDGES, SCANOPTIONS
 from i16_script_generator.scandef import scannable_desc, det_desc, energy_desc, scan, scan_range, strfmt, scancn, \
     centred_scan_range, cscan, theta2theta_horiz, theta2theta_vert, energy_pol, energy, scan2d, psi_scancn, psi, \
     detector, detector_rois, detector_name
 from i16_script_generator.timing import scan_command_time, time_string
-
-TF = ["Times", 12]  # entry
-BF = ["Times", 14]  # Buttons
-SF = ["Times New Roman", 14]  # Title labels
-MF = ["Courier", 12]  # fixed distance format
-LF = ["Times", 14]  # Labels
-HF = ["Courier", 12]  # Text widgets (big)
-bkg = 'white smoke'
-ety = 'white'  # white
-btn = 'azure'  # 'light slate blue'
-opt = 'azure'  # 'light slate blue'
-btn2 = 'gold'
-btn_active = 'grey'
-opt_active = 'grey'
-txtcol = 'black'
-btn_txt = 'black'
-ety_txt = 'black'
-opt_txt = 'black'
-ttl_txt = 'red'
-
-
-class SelectionBox:
-    """
-    Displays all data fields and returns a selection
-    Making a selection returns a list of field strings
-
-    out = SelectionBox(['field1','field2','field3'], current_selection=['field2'], title='', multiselect=False).show()
-    # Make selection and press "Select" > box disappears
-    out = ['list','of','strings']
-    """
-    "------------------------------------------------------------------------"
-    "--------------------------GUI Initilisation-----------------------------"
-    "------------------------------------------------------------------------"
-
-    def __init__(self, parent, data_fields, current_selection=(), title='Make a selection', multiselect=True):
-        self.data_fields = data_fields
-        self.initial_selection = current_selection
-
-        # Create Tk inter instance
-        self.root = tk.Toplevel(parent)
-        self.root.wm_title(title)
-        self.root.minsize(width=100, height=300)
-        self.root.maxsize(width=1200, height=1200)
-        self.root.tk_setPalette(
-            background=bkg,
-            foreground=txtcol,
-            activeBackground=opt_active,
-            activeForeground=txtcol)
-        self.output = []
-
-        # Frame
-        frame = tk.Frame(self.root)
-        frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES, anchor=tk.N)
-
-        "---------------------------ListBox---------------------------"
-        # Eval box with scroll bar
-        frm = tk.Frame(frame)
-        frm.pack(side=tk.TOP, fill=tk.BOTH, expand=tk.YES)
-
-        sclx = tk.Scrollbar(frm, orient=tk.HORIZONTAL)
-        sclx.pack(side=tk.BOTTOM, fill=tk.BOTH)
-
-        scly = tk.Scrollbar(frm)
-        scly.pack(side=tk.RIGHT, fill=tk.BOTH)
-
-        self.lst_data = tk.Listbox(frm, font=MF, selectmode=tk.SINGLE, width=60, height=20, bg=ety,
-                                   xscrollcommand=sclx.set, yscrollcommand=scly.set)
-        self.lst_data.configure(exportselection=True)
-        if multiselect:
-            self.lst_data.configure(selectmode=tk.EXTENDED)
-        self.lst_data.bind('<<ListboxSelect>>', self.fun_listboxselect)
-        self.lst_data.bind('<Double-Button-1>', self.fun_exitbutton)
-
-        # Populate list box
-        for k in self.data_fields:
-            # if k[0] == '_': continue # Omit _OrderedDict__root/map
-            strval = '{}'.format(k)
-            self.lst_data.insert(tk.END, strval)
-
-        self.lst_data.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
-        for select in current_selection:
-            if select in data_fields:
-                idx = data_fields.index(select)
-                self.lst_data.select_set(idx)
-
-        sclx.config(command=self.lst_data.xview)
-        scly.config(command=self.lst_data.yview)
-
-        # self.txt_data.config(xscrollcommand=scl_datax.set,yscrollcommand=scl_datay.set)
-
-        "----------------------------Search Field-----------------------------"
-        frm = tk.LabelFrame(frame, text='Search', relief=tk.RIDGE)
-        frm.pack(fill=tk.X, expand=tk.YES, padx=2, pady=2)
-
-        self.searchbox = tk.StringVar(self.root, '')
-        var = tk.Entry(frm, textvariable=self.searchbox, font=TF, bg=ety, fg=ety_txt)
-        var.bind('<Key>', self.fun_search)
-        var.pack(fill=tk.X, expand=tk.YES, padx=2, pady=2)
-
-        "----------------------------Exit Button------------------------------"
-        frm_btn = tk.Frame(frame)
-        frm_btn.pack(fill=tk.X, expand=tk.YES)
-
-        self.numberoffields = tk.StringVar(self.root, '%3d Selected Fields' % len(self.initial_selection))
-        var = tk.Label(frm_btn, textvariable=self.numberoffields, width=20)
-        var.pack(side=tk.LEFT)
-        btn_exit = tk.Button(frm_btn, text='Select', font=BF, command=self.fun_exitbutton, bg=btn,
-                             activebackground=btn_active)
-        btn_exit.pack(side=tk.RIGHT)
-
-        "-------------------------Start Mainloop------------------------------"
-        self.root.protocol("WM_DELETE_WINDOW", self.f_exit)
-        # self.root.mainloop()
-
-    "------------------------------------------------------------------------"
-    "--------------------------General Functions-----------------------------"
-    "------------------------------------------------------------------------"
-
-    def show(self):
-        """Run the selection box, wait for response"""
-
-        # self.root.deiconify()  # show window
-        self.root.wait_window()  # wait for window
-        return self.output
-
-    def fun_search(self, event=None):
-        """Search the selection for string"""
-        search_str = self.searchbox.get()
-        search_str = search_str + event.char
-        search_str = search_str.strip().lower()
-        if not search_str: return
-
-        # Clear current selection
-        self.lst_data.select_clear(0, tk.END)
-        view_idx = None
-        # Search for whole words first
-        for n, item in enumerate(self.data_fields):
-            if re.search(r'\b%s\b' % search_str, item.lower()):  # whole word search
-                self.lst_data.select_set(n)
-                view_idx = n
-        # if nothing found, search anywhere
-        if view_idx is None:
-            for n, item in enumerate(self.data_fields):
-                if search_str in item.lower():
-                    self.lst_data.select_set(n)
-                    view_idx = n
-        if view_idx is not None:
-            self.lst_data.see(view_idx)
-        self.fun_listboxselect()
-
-    def fun_listboxselect(self, event=None):
-        """Update label on listbox selection"""
-        self.numberoffields.set('%3d Selected Fields' % len(self.lst_data.curselection()))
-
-    def fun_exitbutton(self, event=None):
-        """Closes the current data window and generates output"""
-        selection = self.lst_data.curselection()
-        self.output = [self.data_fields[n] for n in selection]
-        self.root.destroy()
-
-    def f_exit(self, event=None):
-        """Closes the current data window"""
-        self.output = self.initial_selection
-        self.root.destroy()
+from i16_script_generator.tkwidgets import TF, BF, SF, MF, bkg, ety, btn, opt, btn_active, opt_active, txtcol, ety_txt, \
+    SelectionBox
 
 
 def select_scannable(parent):
@@ -1322,7 +1158,7 @@ class ScanGenerator:
         cmd = ScanGenerator(root).show()  # Waits for user to press "insert"
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, initial_command=''):
         """Initialise"""
 
         self.parent = parent
@@ -1359,7 +1195,7 @@ class ScanGenerator:
         self.detector = tk.StringVar(self.root, 'pil')
         self.exposure = tk.DoubleVar(self.root, 1)
         self.time = tk.StringVar(self.root, '')
-        self.command = tk.StringVar(self.root, '')
+        self.command = tk.StringVar(self.root, initial_command)
 
         "----------- TOP Scan Tabs -----------"
         frm = ttk.Frame(self.root)
@@ -1448,6 +1284,7 @@ class ScanGenerator:
             var.pack(side=tk.LEFT, fill=tk.Y, padx=4)
 
         "-------------------------Start Mainloop------------------------------"
+        self.ety_command()
         self.root.protocol("WM_DELETE_WINDOW", self.f_exit)
         if self.parent is None:
             self.root.mainloop()

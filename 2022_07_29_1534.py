@@ -88,6 +88,8 @@ for tempval in frange(300, 360, 5):
     con delta 0 eta 0 phi -55
     pos hkl [0,0,0.5]
     scancn mu 0.05 121 pil 10 roi2
+    go maxval
+    hklnew = hkl()
 
     for hklval in hklvals:
         pos hkl hklval

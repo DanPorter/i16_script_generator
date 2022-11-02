@@ -24,8 +24,9 @@ re_detector = re.compile('|'.join([r'\s%s\s+\.?\d+\.?\d*' % det for det in detec
 re_lists = re.compile(r'\[[^\[]+?\]|\([^\(]+?\)')
 re_lists_or_float = re.compile(r'\[.+?\]|\(.+?\)|-?\.?\d+\.?\d*')
 re_variables = re.compile(r'[a-zA-Z]\w*')
+re_assignment = re.compile(r'\w\s*=[^=]+')
 re_for = re.compile(r'in (.+?):')
-re_tabs = re.compile(r'\A(\s*?)\S')
+re_tabs = re.compile(r'^( {4}|\t)\S?') # re.compile(r'\A(\s*?)\S')
 re_comment = re.compile(r'#.*')
 re_sleep = re.compile(r'sleep\s?\(\s*(\d+\.?\d*)|w\s?\(\s*(\d+\.?\d*)|pos\s+w\s+(\d+\.?\d*)')
 
@@ -220,7 +221,7 @@ def time_script(filename, print_script=False):
             print('----- Time Script: %s -----' % filename)
         tot_time = 0
         comment_zone = False
-        bracket_zone = False
+        bracket_count = 0
         bracket_var = ''
         bracket_str = ''
         local_vars = {'frange': frange, 'dnp': np}
@@ -228,28 +229,31 @@ def time_script(filename, print_script=False):
         tab_pos = 0
         for line in f:
             line = re_comment.sub('', line)  # remove comments
+            line = line.replace("'''", '"""')
             if line.count('"""') % 2 == 1:
                 comment_zone = not comment_zone
             if comment_zone or not line.strip() or line.strip()[0] in ['#', '\'', '\"']:
                 continue
-            if bracket_zone:
+            if bracket_count > 0:
                 bracket_str += line
-                if line.count('[') != line.count(']') and line.count('[') < line.count(']'):
+                bracket_count += line.count('[') - line.count(']')
+                if bracket_count == 0:
                     # Close bracket
                     # print('close bracket: %s = %s' % (bracket_var, bracket_str.replace('\n', '')))
                     # print('close bracket: %s =' % bracket_var, eval_range(bracket_str.replace('\n', '')) )
                     local_vars[bracket_var] = eval_range(bracket_str.replace('\n', ''))
+                    bracket_str = ''
 
             # variable assignment inc. multiline
-            if '=' in line:
+            if re_assignment.match(line):
                 var, value = line.split('=')
-                if line.count('[') != line.count(']') and line.count('[') > line.count(']'):
+                if line.count('[') > line.count(']'):
                     # print('Open bracket:', value)
-                    bracket_zone = True
+                    bracket_count += line.count('[') - line.count(']')
                     bracket_var = var.strip()
                     bracket_str = value
                 else:
-                    local_vars[var.strip()] = eval(value,local_vars)
+                    local_vars[var.strip()] = eval(value, local_vars)
 
             # Tab position of line
             line_tab_pos = eval_tabpos(line)
@@ -290,4 +294,83 @@ def time_script(filename, print_script=False):
             print('----- End Time Script: %s -----' % filename)
             print(f'   Script total time: %s' % time_string(tot_time))
     return datetime.timedelta(seconds=tot_time)
+
+
+def time_script_string(script_string):
+    """
+    Time a script, return datetime.timedelta, updated string
+    """
+    output_str = []
+    tot_time = 0
+    comment_zone = False
+    bracket_count = 0
+    bracket_var = ''
+    bracket_str = ''
+    local_vars = {'frange': frange, 'dnp': np}
+    loop_points = [1]
+    tab_pos = 0
+    tab = "    "
+    for line in script_string.splitlines():
+        cmd = re_comment.sub('', line)  # remove comments
+        cmd = cmd.replace("'''", '"""')
+        if cmd.count('"""') % 2 == 1:
+            comment_zone = not comment_zone
+        if comment_zone or not cmd.strip() or cmd.strip()[0] in ['#', '\'', '\"']:
+            output_str += [line]
+            continue
+        if bracket_count > 0:
+            bracket_str += cmd
+            bracket_count += cmd.count('[') - cmd.count(']')
+            if bracket_count == 0:
+                # Close bracket
+                # print('close bracket: %s = %s' % (bracket_var, bracket_str.replace('\n', '')))
+                # print('close bracket: %s =' % bracket_var, eval_range(bracket_str.replace('\n', '')) )
+                local_vars[bracket_var] = eval_range(bracket_str.replace('\n', ''))
+                bracket_str = ''
+
+        # variable assignment inc. multiline
+        if re_assignment.search(cmd):
+            var, value = cmd.split('=')
+            if cmd.count('[') > cmd.count(']'):
+                bracket_count += cmd.count('[') - cmd.count(']')
+                bracket_var = var.strip()
+                bracket_str = value
+            else:
+                try:
+                    value = value.split(';')[0]
+                    local_vars[var.strip()] = eval(value, local_vars)  # breaks if e.g. hkl=hkl()
+                except NameError:
+                    local_vars[var.strip()] = 0
+
+                    # Tab position of line
+        line_tab_pos = eval_tabpos(cmd)
+        if line_tab_pos < tab_pos:
+            loop_points = loop_points[:line_tab_pos+1]
+        cmd = cmd.strip()
+
+        # For loop in line
+        if cmd.startswith('for'):
+            for_time, for_points = eval_for(cmd, local_vars=local_vars)
+            tot_time += for_time
+            loop_points += [for_points]
+            output_str += [tab * line_tab_pos + cmd + '  # %s points' % for_points]
+            continue
+
+        # pos commands
+        tot_loop_points = np.prod(loop_points)
+        tot_time += cmd.count('pos') * tot_loop_points
+        tot_time += eval_sleep(cmd)
+
+        # scan commands
+        if 'scan' in cmd:
+            # replace any local variables with zeros
+            orig = cmd
+            for var in local_vars:
+                cmd = cmd.replace(var, '0')
+            scan_seconds, scan_points = scan_command_time(cmd)
+            tot_time += scan_seconds * tot_loop_points
+            output_str += [tab * line_tab_pos + orig + '  # %.4gs * %s' % (scan_seconds, tot_loop_points)]
+            continue
+        output_str += [line]
+    return datetime.timedelta(seconds=float(tot_time)), '\n'.join(output_str)
 

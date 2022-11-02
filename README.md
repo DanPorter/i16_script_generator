@@ -1,13 +1,13 @@
 # i16_script_generator
 Python module and GUIs for automatic creation of experiment scripts.
 
-**Version 1.0**
+**Version 0.9**
 
 By Dan Porter, PhD
 Diamond Light Source Ltd.
 2022
 
-![GUI Window](https://github.com/DanPorter/i16_scan_generator/blob/master/i16_scan_generator.PNG?raw=true)
+![GUI Window](https://github.com/DanPorter/i16_script_generator/blob/master/i16_script_generator.PNG?raw=true)
 
 #### Usage:
 Start the GUI from a terminal
@@ -34,9 +34,9 @@ BuiltIn packages used: *sys*, *os*, *re*
 
 Download latest version from GitHub, then run the file
 ```text
-$ git clone https://github.com/DanPorter/i16_scan_generator.git
-$ cd i16_scan_generator
-$ python -m i16_scan_generator.py
+$ git clone https://github.com/DanPorter/i16_script_generator.git
+$ cd i16_script_generator
+$ python -m i16_script_generator.py
 ```
 
 
