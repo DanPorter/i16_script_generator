@@ -1,0 +1,35 @@
+
+
+pos shutter 1
+pos x1 1  # fast shutter
+pos ss [.5, .5]
+pos atten 0
+pos do do.pil
+con gam 0 mu 0 phi 0  # fixed phi
+
+# szc.calibrate('4K',Ta) # calibrate before start
+fitproc = i16_gda_functions.peakfit_processor('tempdep.dat', 'Ta')  # saves in script dir
+
+hkl_list = [[0, 0, 1], [0, 0, 2]]
+
+temp_stop = False
+for tval in frange(10, 100, 5) + frange(110, 300, 10):
+    if temp_stop: break
+    pos tset tval
+    while abs(Ta() - tval) > 0.2:
+        print('Waiting...Ta = %5.1f K, Tb = %5.1f K' % (Ta(), Tb()))
+        w(30)
+    print('Stabilising...Ta = %5.1f K, Tb = %5.1f K' % (Ta(), Tb()))
+    w(30)
+
+    print('Adjusting height')
+    pos szc 0
+
+    for n in range(len(hkl_list)):
+        pos hkl hkl_list[n]
+        scancn eta 0.05 61 checkbeam fitproc pil 1 roi1 roi2
+        go peak
+        pil2max()
+        hkl_list[n] = hkl()
+
+print('Finished')

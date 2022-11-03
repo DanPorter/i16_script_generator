@@ -1,0 +1,34 @@
+
+
+pos shutter 1
+pos x1 1 # fast shutter
+pos ss [.02,.02]
+pos atten 0
+pos do do.pil
+con gam 0 mu 0 phi 0 # fixed phi
+
+ini_sx = sx()
+ini_sy = sy()
+iperp = sperp()
+ipara = spara()
+x_min, x_max, x_step = -0.2, 0.2, 0.01
+y_min, y_max, y_step = -0.2, 0.2, 0.01
+
+script_stop = False
+line_stop = False
+for sxval in frange(iperp+x_min, iperp+x_max, x_step):
+    if script_stop or line_stop:
+        break
+    pos sperp sxval
+    for syval in frange(ipara+y_min, ipara+y_max, y_step):
+        if script_stop:
+            break
+        pos sperp sxval
+        pos spara syval
+        scancn eta 0.05 41 checkbeam pil 1 roi1 roi2
+
+# Return to original positions
+pos sx ini_sx
+pos sy ini_sy
+
+print('Finished')

@@ -1,0 +1,16 @@
+
+
+pos shutter 1
+pos x1 1 # fast shutter
+pos ss [.5,.5]
+pos atten 0
+pos do do.pil
+
+ini_chi = chi()
+stop_script = False
+for chival in frange(ini_chi-5, ini_chi+5, 1):
+    if stop_script: break
+    pos chi chival
+    scancn eta 0.05 61 checkbeam pil 1 roi1 roi2
+
+print('Finished')

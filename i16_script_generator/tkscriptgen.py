@@ -7,6 +7,7 @@ Diamond Light Source Ltd
 2022
 """
 
+import os
 import re
 import datetime
 import tkinter as tk
@@ -14,11 +15,19 @@ from tkinter import ttk
 from tkinter import messagebox
 
 from i16_script_generator.params import SCANNABLES
-from i16_script_generator.timing import time_script_string, time_string, calc_tabpos
+from i16_script_generator.timing import time_script_string, time_string, calc_tabpos, top_comment_lines
 from i16_script_generator.tkwidgets import TF, BF, SF, MF, bkg, ety, btn, opt, btn_active, opt_active, txtcol, \
     ety_txt, SelectionBox, popup_about, popup_message, popup_help, topmenu, filedialog
 from i16_script_generator.tkscangen import select_scannable, scan_range, strfmt, ScanGenerator
 
+
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'example_scripts')
+TEMPLATES = {
+    'Temperature': os.path.join(TEMPLATE_DIR, 'temperature.txt'),
+    'Azimuth': os.path.join(TEMPLATE_DIR, 'azimuth.txt'),
+    'Chi': os.path.join(TEMPLATE_DIR, 'chi_scan.txt'),
+    'Surface': os.path.join(TEMPLATE_DIR, 'surface.txt'),
+}
 
 SCRIPT = '''"""
 Example Script
@@ -71,6 +80,84 @@ def search_re(pattern, text):
     return matches
 
 
+class TemplateSelector:
+    """
+    Small GUI to select Templates
+    """
+
+    def __init__(self, parent):
+        """Initialise"""
+
+        self.parent = parent
+        self.output = None, None
+
+        # Create Tk inter instance
+        self.root = tk.Toplevel(self.parent)
+        self.root.wm_title('Create For Loop')
+        # self.root.minsize(width=640, height=480)
+        self.root.maxsize(width=self.root.winfo_screenwidth(), height=self.root.winfo_screenheight())
+        self.root.tk_setPalette(
+            background=bkg,
+            foreground=txtcol,
+            activeBackground=opt_active,
+            activeForeground=txtcol
+        )
+        style = ttk.Style()
+        style.configure('.', font=BF, background=bkg)
+
+        # Variables
+        self.template_name = tk.StringVar(self.root, 'Select...')
+        self.replace = tk.BooleanVar(self.root, False)
+
+        frm = ttk.Frame(self.root)
+        frm.pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH)
+
+        var = ttk.Label(frm, text='Template:', font=SF)
+        var.pack(side=tk.LEFT)
+        var = tk.OptionMenu(frm, self.template_name, *TEMPLATES.keys())
+        var.config(font=SF, width=10, bg=opt, activebackground=opt_active)
+        var["menu"].config(bg=opt, bd=0, activebackground=opt_active)
+        var.pack(side=tk.LEFT, padx=4)
+        var = tk.Checkbutton(frm, text='Replace current script?', variable=self.replace, font=SF)
+        var.pack(side=tk.LEFT, padx=6)
+
+        frm = ttk.Frame(self.root)
+        frm.pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH)
+
+        var = tk.Button(frm, text='INSERT', font=BF, command=self.insert_command,
+                        bg='gold', activebackground=btn_active, fg='black')
+        var.pack(side=tk.LEFT, fill=tk.X, padx=4)
+
+        "-------------------------Start Mainloop------------------------------"
+        self.root.protocol("WM_DELETE_WINDOW", self.f_exit)
+
+    def command(self):
+        """Load text file"""
+        template = self.template_name.get()
+        replace = self.replace.get()
+        if template in TEMPLATES:
+            with open(TEMPLATES[template]) as f:
+                script = f.read()
+        else:
+            script = ""
+        return script, replace
+
+    def insert_command(self):
+        """Insert command in parent, destroy window"""
+        self.output = self.command()
+        self.root.destroy()
+
+    def show(self):
+        """Run the selection box, wait for response"""
+
+        # self.root.deiconify()  # show window
+        self.root.wait_window()  # wait for window
+        return self.output
+
+    def f_exit(self):
+        self.root.destroy()
+
+
 class LoopGen:
     """
     Small GUI to select scannable for loops
@@ -80,6 +167,7 @@ class LoopGen:
         """Initialise"""
 
         self.parent = parent
+        self.output = None
 
         # Create Tk inter instance
         self.root = tk.Toplevel(self.parent)
@@ -221,6 +309,7 @@ class LoopGen:
 
     def insert_command(self):
         """Insert command in parent, destroy window"""
+        self.output = self.command()
         self.root.destroy()
 
     def show(self):
@@ -228,7 +317,7 @@ class LoopGen:
 
         # self.root.deiconify()  # show window
         self.root.wait_window()  # wait for window
-        return self.command()
+        return self.output
 
     def f_exit(self):
         self.root.destroy()
@@ -303,6 +392,10 @@ class ScriptGenerator:
 
         frm = ttk.LabelFrame(left, text='Insert', relief=tk.RIDGE)
         frm.pack(side=tk.TOP, padx=5, pady=5)
+
+        var = tk.Button(frm, text='Template...', command=self.btn_template,
+                        font=BF, bg=btn, activebackground=btn_active)
+        var.pack(side=tk.TOP, fill=tk.X, padx=2, pady=6)
 
         var = tk.Button(frm, text='Loop...', command=self.btn_loop,
                         font=BF, bg=btn, activebackground=btn_active)
@@ -575,6 +668,20 @@ class ScriptGenerator:
     "------------------------------------------------------------------------"
     "---------------------------Button Callbacks-----------------------------"
     "------------------------------------------------------------------------"
+
+    def btn_template(self):
+        """Insert or repalce script"""
+        script, replace = TemplateSelector(self.root).show()
+        if script:
+            if replace:
+                # Replace script below top comment
+                comment_lines = top_comment_lines(self.text.get('1.0', tk.END))
+                print(comment_lines)
+                self.text.delete('%d.0' % (comment_lines + 1), tk.END)
+                self.text.insert(tk.END, script)
+            else:
+                self.text.insert(tk.INSERT, script)
+            self.changes()
 
     def btn_loop(self):
         """Add new loop"""

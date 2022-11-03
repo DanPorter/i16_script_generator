@@ -1,0 +1,27 @@
+
+
+pos shutter 1
+pos x1 1  # fast shutter
+pos ss [.5,.5]
+pos atten 0
+pos do do.pil
+setnhkl([1,0,0]) # azimuth reference vector (h,k,l)
+con gam 0 mu 0 psi 0  # fixed psi mode
+
+hklval = [0,0,1]
+psi_range = frange(-180, 180,5)
+
+# Simulation
+for psival in psi_range:
+    pos psic psival
+    out = simhkl(hklval)
+
+# Measurement
+script_stop = False
+for psival in psi_range:
+    if script_stop: break
+    pos psic psival
+    pos hkl hklval
+    scancn eta 0.05 61 checkbeam pil 1 roi1 roi2
+
+print('Finished')

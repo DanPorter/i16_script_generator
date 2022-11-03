@@ -101,10 +101,10 @@ re_scancn = re.compile(r' \w+ -?\d+\.?\d* \d+')  # scannable, step, nsteps
 re_cscan = re.compile(r' \w+ -?\d+\.?\d* -?\d+\.?\d*')  # scannable, range, step
 detector_list = [DETECTORS[det]['regex'] for det in DETECTORS]
 re_detector = re.compile('|'.join([r'\s%s\s+\.?\d+\.?\d*' % det for det in detector_list]))
-re_lists = re.compile(r'\[[^\[]+?\]|\([^\(]+?\)')
+re_errorname = re.compile(r"'([^']*)'")
 re_lists_or_float = re.compile(r'\[.+?\]|\(.+?\)|-?\.?\d+\.?\d*')
 re_variables = re.compile(r'[a-zA-Z]\w*')
-re_assignment = re.compile(r'\w\s*=[^=]+')
+re_assignment = re.compile(r'^\s*[\w_]+\s*=[^=]+')
 re_for = re.compile(r'in (.+?):')
 re_comment = re.compile(r'#.*')
 re_sleep = re.compile(r'sleep\s?\(\s*(\d+\.?\d*)|w\s?\(\s*(\d+\.?\d*)|pos\s+w\s+(\d+\.?\d*)')
@@ -162,11 +162,11 @@ def centred_scan_range(step=None, nsteps=None, srange=None):
 
 
 def frange(start, stop=None, step=1):
-    """interal frange function to pass to eval"""
+    """Equivlent to GDA frange"""
     if stop is None:
         stop = start
         start = 0
-    return np.arange(start, stop+step, step).tolist()
+    return np.arange(start, stop + step, step).tolist()
 
 
 def time_string(tot_seconds):
@@ -180,24 +180,24 @@ def time_string(tot_seconds):
     return '%s%s%ss' % (hours, mins, secs)
 
 
-def eval_range(cmd, local_vars=None):
-    if local_vars is None:
-        local_vars = {'frange': frange, 'dnp': np}
-    # replace variable names with zeros
-    for lst in re_lists.findall(cmd):
-        new = re_variables.sub('0', lst)
-        # new = re_lists.sub('0', new)
-        cmd = cmd.replace(lst, new)
-    # replace other variables
-    for var in re_variables.findall(cmd):
-        if var not in local_vars:
-            cmd = cmd.replace(var, '[0]')
-    # evaluate range
-    try:
-        array = np.asarray(eval(cmd, local_vars)).reshape(-1)
-    except Exception as xx:
-        print('Warning: Loop didnt complete: %s' % xx)
-        array = np.array([])
+def eval_range(cmd, variables=None):
+    """Evaluate a range string, setting unknown varialbes as items in the list, returns an array"""
+    local_vars = {'frange': frange, 'dnp': np}
+    if variables is not None:
+        local_vars.update(variables)
+
+    success = False
+    array = np.array([])
+    while not success:
+        try:
+            array = np.asarray(eval(cmd, local_vars)).reshape(-1)
+            success = True
+        except NameError as ne:
+            name = re_errorname.findall(str(ne))[0]
+            local_vars[name] = [0]
+        except Exception as xx:
+            print('Warning: Loop didnt complete: %s' % xx)
+            success = True
     return array
 
 
@@ -208,7 +208,7 @@ def eval_sleep(cmd):
 
 def eval_for(line, time_per_point=1, local_vars=None):
     """Evaluate for loop time, returns time, nsteps"""
-    range_find = re_for.findall(line)
+    range_find = re_for.findall(line)  # returns "...": for x in "...":
     time = 0
     npoints = 0
     for range_str in range_find:
@@ -221,60 +221,13 @@ def eval_for(line, time_per_point=1, local_vars=None):
 def calc_tabpos(line, tablen=4):
     """Evaluate tab position of line, returns number of tabs"""
     line = line.replace(' ' * tablen, '\t')
-    count = line[:len(line)-len(line.lstrip())].count('\t')
+    count = line[:len(line) - len(line.lstrip())].count('\t')
     return count
 
 
 def scan_time(nsteps, srange, exposure=1., motor_speed=1., motor_stabilisation=1.):
     """Return total scan time in seconds"""
     return (nsteps*exposure) + (nsteps*motor_stabilisation) + np.max(srange/motor_speed)
-
-
-def scan_command_time_old(cmd):
-    """Use regular expressions to determine scan time from command"""
-    cmds = cmd.split(';')
-    tot_time = 0
-    tot_points = 0
-    for cmd in cmds:
-        if 'scan' not in cmd:
-            continue
-        cmd_time = 1
-        cmd_points = 1
-        # Type of scan
-        if 'scancn' in cmd:
-            for val in re_scancn.findall(cmd):
-                cmd = cmd.replace(val, '')
-                scannable, step, nsteps = val.split()
-                step, nsteps, srange = centred_scan_range(float(step), int(nsteps))
-                speed, stabilisation = scannable_speed(scannable)
-                cmd_time *= scan_time(nsteps, srange, exposure=0, motor_speed=speed, motor_stabilisation=stabilisation)
-                cmd_points *= nsteps
-        elif 'cscan' in cmd:
-            for val in re_cscan.findall(cmd):
-                cmd = cmd.replace(val, '')
-                scannable, halfrange, step = val.split()
-                step, nsteps, srange = centred_scan_range(float(step), srange=float(halfrange)*2)
-                speed, stabilisation = scannable_speed(scannable)
-                cmd_time += scan_time(nsteps, srange, exposure=0, motor_speed=speed, motor_stabilisation=stabilisation)
-                cmd_points *= nsteps
-        elif 'pscan' in cmd:
-            pass
-        else:
-            # scan/ rscan
-            for val in re_scan.findall(cmd):
-                cmd = cmd.replace(val, ' ')
-                scannable, start, stop, step = val.split()
-                start, stop, step, nsteps, srange = scan_range(float(start), float(stop), float(step))
-                speed, stabilisation = scannable_speed(scannable)
-                cmd_time += scan_time(nsteps, srange, exposure=0, motor_speed=speed, motor_stabilisation=stabilisation)
-                cmd_points *= nsteps
-        # Detector exposure
-        for val in re_detector.findall(cmd):
-            exposure = float(val.split()[-1])
-            cmd_time += cmd_points * exposure
-        tot_time += cmd_time
-        tot_points += cmd_points
-    return tot_time, tot_points
 
 
 def scan_command_time(cmd, debug=False):
@@ -319,7 +272,7 @@ def scan_command_time(cmd, debug=False):
             elif len(values) == 2 and scan_type == 'cscan':
                 # halfrange, step
                 # print('cscan', var, values)
-                step, nsteps, srange = centred_scan_range(step=values[1], srange=values[0]*2)
+                step, nsteps, srange = centred_scan_range(step=values[1], srange=values[0] * 2)
                 speed, stabilisation = scannable_speed(var)
                 if debug:
                     print('    cscan', var, step, nsteps, srange, speed, stabilisation)
@@ -352,7 +305,6 @@ def time_script_string(script_string):
     bracket_str = ''
     local_vars = {'frange': frange, 'dnp': np}
     loop_points = [1]
-    tab_pos = 0
     tab = "    "
     script_string = script_string.replace('\t', tab)
     for line in script_string.splitlines():
@@ -372,6 +324,8 @@ def time_script_string(script_string):
                 # print('close bracket: %s =' % bracket_var, eval_range(bracket_str.replace('\n', '')) )
                 local_vars[bracket_var] = eval_range(bracket_str.replace('\n', ''))
                 bracket_str = ''
+                # output_str += [line + '  # %s = %s' % (bracket_var, local_vars[bracket_var])]
+                # continue
 
         # variable assignment inc. multiline
         if re_assignment.search(cmd):
@@ -386,11 +340,13 @@ def time_script_string(script_string):
                     local_vars[var.strip()] = eval(value, local_vars)  # breaks if e.g. hkl=hkl()
                 except NameError:
                     local_vars[var.strip()] = 0
+                # output_str += [line + '  # %s = %s' % (var.strip(), local_vars[var.strip()])]
+                # continue
 
-                    # Tab position of line
+        # Tab position of line
         line_tab_pos = calc_tabpos(cmd)
-        if line_tab_pos < tab_pos:
-            loop_points = loop_points[:line_tab_pos+1]
+        if line_tab_pos < len(loop_points):
+            loop_points = loop_points[:line_tab_pos + 1]
         cmd = cmd.strip()
 
         # For loop in line
