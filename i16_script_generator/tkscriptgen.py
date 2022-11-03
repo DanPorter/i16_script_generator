@@ -13,8 +13,8 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 
-from i16_script_generator.params import SCANNABLES, DETECTORS, EDGES, SCANOPTIONS
-from i16_script_generator.timing import time_script_string, time_string, eval_tabpos
+from i16_script_generator.params import SCANNABLES
+from i16_script_generator.timing import time_script_string, time_string, calc_tabpos
 from i16_script_generator.tkwidgets import TF, BF, SF, MF, bkg, ety, btn, opt, btn_active, opt_active, txtcol, \
     ety_txt, SelectionBox, popup_about, popup_message, popup_help, topmenu, filedialog
 from i16_script_generator.tkscangen import select_scannable, scan_range, strfmt, ScanGenerator
@@ -59,9 +59,8 @@ REPL = [
 ]
 
 
-def search_re(pattern, text, groupid=0):
+def search_re(pattern, text):
     matches = []
-
     text = text.splitlines()
     for i, line in enumerate(text):
         for match in re.finditer(pattern, line):
@@ -489,20 +488,21 @@ class ScriptGenerator:
         else:
             text = event.widget
         tabWidth = 4
-        line = text.get("insert linestart", "insert")
-        previous = text.get("insert -%d chars" % tabWidth, "insert")
-        if line == " " * len(line) and len(line) % tabWidth > 0:
-            # print('deleting %d chars' % (len(line) % tabWidth))
-            text.delete("insert -%d chars" % (len(line) % tabWidth), "insert")
-            return "break"
-        elif previous == " " * tabWidth:
-            # print('delete tab')
-            text.delete("insert-%d chars" % tabWidth, "insert")
-            return "break"
-        elif '\n' in previous:
-            # print('delete start of tab %d' % len(line))
-            text.delete("insert-%d chars" % len(line), "insert")
-            return "break"
+
+        try:
+            text.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            line = text.get("insert linestart", "insert")
+            previous = text.get("insert -%d chars" % tabWidth, "insert")
+            if line == " " * len(line) and len(line) % tabWidth > 0:  # delete tab
+                text.delete("insert -%d chars" % (len(line) % tabWidth), "insert")
+            elif previous == " " * tabWidth:  # delete tab
+                text.delete("insert-%d chars" % tabWidth, "insert")
+            elif '\n' in previous[:-1]:  # delete spaces to start of line
+                text.delete("insert-%d chars" % len(line), "insert")
+            else: # normal delete
+                text.delete("insert-1 chars", "insert")
+        return "break"
 
     "------------------------------------------------------------------------"
     "---------------------------Menu Callbacks-----------------------------"
@@ -584,7 +584,7 @@ class ScriptGenerator:
             stop = self.text.index('insert lineend')
             line = self.text.get(start, stop)
             print('"%r"' % line)
-            tabpos = eval_tabpos(line)
+            tabpos = calc_tabpos(line)
             loop = loop.replace('\n', '\n' + "    " * tabpos)
             print(tabpos, '%r' % loop)
             if 'for' in line:  # replace loop
@@ -600,7 +600,7 @@ class ScriptGenerator:
             start = self.text.index('insert linestart')
             stop = self.text.index('insert lineend')
             line = self.text.get(start, stop)
-            tabpos = eval_tabpos(line)
+            tabpos = calc_tabpos(line)
             if 'scan' in line:
                 self.text.delete(start, stop)
                 self.text.insert(start, "    " * tabpos + scan + '\n' + "    " * tabpos)

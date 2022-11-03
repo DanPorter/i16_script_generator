@@ -49,6 +49,8 @@ SCANNABLES = {
     },
     'energy': {
         'desc': 'incident photon energy',
+        'start': 7.9,
+        'stop': 8.1,
         'step': '0.001',
         'speed': 0.2,
         'stabilisation': 1,

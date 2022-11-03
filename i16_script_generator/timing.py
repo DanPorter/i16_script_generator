@@ -26,7 +26,6 @@ re_lists_or_float = re.compile(r'\[.+?\]|\(.+?\)|-?\.?\d+\.?\d*')
 re_variables = re.compile(r'[a-zA-Z]\w*')
 re_assignment = re.compile(r'\w\s*=[^=]+')
 re_for = re.compile(r'in (.+?):')
-re_tabs = re.compile(r'^( {4}|\t)\S?') # re.compile(r'\A(\s*?)\S')
 re_comment = re.compile(r'#.*')
 re_sleep = re.compile(r'sleep\s?\(\s*(\d+\.?\d*)|w\s?\(\s*(\d+\.?\d*)|pos\s+w\s+(\d+\.?\d*)')
 
@@ -47,6 +46,51 @@ def time_string(tot_seconds):
     mins = '' if mins < 1 else '%.0f mins, ' % mins
     secs = '%.0f' % secs
     return '%s%s%ss' % (hours, mins, secs)
+
+
+def eval_range(cmd, local_vars=None):
+    if local_vars is None:
+        local_vars = {'frange': frange, 'dnp': np}
+    # replace variable names with zeros
+    for lst in re_lists.findall(cmd):
+        new = re_variables.sub('0', lst)
+        # new = re_lists.sub('0', new)
+        cmd = cmd.replace(lst, new)
+    # replace other variables
+    for var in re_variables.findall(cmd):
+        if var not in local_vars:
+            cmd = cmd.replace(var, '[0]')
+    # evaluate range
+    try:
+        array = np.asarray(eval(cmd, local_vars)).reshape(-1)
+    except Exception as xx:
+        print('Warning: Loop didnt complete: %s' % xx)
+        array = np.array([])
+    return array 
+
+
+def eval_sleep(cmd):
+    """Return time in seconds from sleep(x) or pos w x or w(x)"""
+    return sum([float(n) if n else 0 for fn in re_sleep.findall(cmd) for n in fn])
+
+
+def eval_for(line, time_per_point=1, local_vars=None):
+    """Evaluate for loop time, returns time, nsteps"""
+    range_find = re_for.findall(line)
+    time = 0
+    npoints = 0
+    for range_str in range_find:
+        array = eval_range(range_str, local_vars)
+        npoints += len(array)
+        time += len(array) * time_per_point
+    return time, npoints
+
+
+def calc_tabpos(line, tablen=4):
+    """Evaluate tab position of line, returns number of tabs"""
+    line = line.replace(' ' * tablen, '\t')
+    count = line[:len(line)-len(line.lstrip())].count('\t')
+    return count
 
 
 def scan_time(nsteps, srange, exposure=1, motor_speed=1, motor_stabilisation=1):
@@ -161,144 +205,12 @@ def scan_command_time(cmd, debug=False):
     return tot_time, tot_points
 
 
-def eval_range(cmd, local_vars=None):
-    if local_vars is None:
-        local_vars = {'frange': frange, 'dnp': np}
-    # replace variable names with zeros
-    for lst in re_lists.findall(cmd):
-        new = re_variables.sub('0', lst)
-        # new = re_lists.sub('0', new)
-        cmd = cmd.replace(lst, new)
-    # replace other variables
-    for var in re_variables.findall(cmd):
-        if var not in local_vars:
-            cmd = cmd.replace(var, '[0]')
-    # evaluate range
-    try:
-        array = np.asarray(eval(cmd, local_vars)).reshape(-1)
-    except Exception as xx:
-        print('Warning: Loop didnt complete: %s' % xx)
-        array = np.array([])
-    return array 
-
-
-def eval_sleep(cmd):
-    """Return time in seconds from sleep(x) or pos w x or w(x)"""
-    return sum([float(n) if n else 0 for fn in re_sleep.findall(cmd) for n in fn])
-
-
-def eval_for(line, time_per_point=1, local_vars=None):
-    """Evaluate for loop time, returns time, nsteps"""
-    range_find = re_for.findall(line)
-    time = 0
-    npoints = 0
-    for range_str in range_find:
-        array = eval_range(range_str, local_vars)
-        npoints += len(array)
-        time += len(array) * time_per_point
-    return time, npoints
-
-
-def eval_tabpos(line, tablen=4):
-    """Evaluate tab position of line, returns number of tabs"""
-    out = re_tabs.findall(line)
-    count = 0
-    if out:
-        out = out[0]
-        if '\t' in out:
-            count = out.count('\t')
-        else:
-            count = out.count(' ' * tablen)
-    return count
-
-
-def time_script(filename, print_script=False):
-    """
-    Time a script, return datetime.timedelta
-    """
-    with open(filename) as f:
-        if print_script:
-            print('----- Time Script: %s -----' % filename)
-        tot_time = 0
-        comment_zone = False
-        bracket_count = 0
-        bracket_var = ''
-        bracket_str = ''
-        local_vars = {'frange': frange, 'dnp': np}
-        loop_points = [1]
-        tab_pos = 0
-        for line in f:
-            line = re_comment.sub('', line)  # remove comments
-            line = line.replace("'''", '"""')
-            if line.count('"""') % 2 == 1:
-                comment_zone = not comment_zone
-            if comment_zone or not line.strip() or line.strip()[0] in ['#', '\'', '\"']:
-                continue
-            if bracket_count > 0:
-                bracket_str += line
-                bracket_count += line.count('[') - line.count(']')
-                if bracket_count == 0:
-                    # Close bracket
-                    # print('close bracket: %s = %s' % (bracket_var, bracket_str.replace('\n', '')))
-                    # print('close bracket: %s =' % bracket_var, eval_range(bracket_str.replace('\n', '')) )
-                    local_vars[bracket_var] = eval_range(bracket_str.replace('\n', ''))
-                    bracket_str = ''
-
-            # variable assignment inc. multiline
-            if re_assignment.match(line):
-                var, value = line.split('=')
-                if line.count('[') > line.count(']'):
-                    # print('Open bracket:', value)
-                    bracket_count += line.count('[') - line.count(']')
-                    bracket_var = var.strip()
-                    bracket_str = value
-                else:
-                    local_vars[var.strip()] = eval(value, local_vars)
-
-            # Tab position of line
-            line_tab_pos = eval_tabpos(line)
-            if line_tab_pos < tab_pos:
-                loop_points = loop_points[:line_tab_pos+1]
-            line = line.strip()
-
-            # For loop in line
-            if line.startswith('for'):
-                for_time, for_points = eval_for(line, local_vars=local_vars)
-                tot_time += for_time
-                loop_points += [for_points]
-                if print_script:
-                    ln = '\t' * line_tab_pos + line + '  # %s points' % for_points
-                    print(ln)
-                continue
-
-            # pos commands
-            tot_loop_points = np.prod(loop_points)
-            tot_time += line.count('pos') * tot_loop_points
-            tot_time += eval_sleep(line)
-
-            # scan commands
-            if 'scan' in line:
-                # replace any local variables with zeros
-                for var in local_vars:
-                    line = line.replace(var, '0')
-                scan_seconds, scan_points = scan_command_time(line)
-                tot_time += scan_seconds * tot_loop_points
-                if print_script:
-                    ln = '\t' * line_tab_pos + line + '  # %.4gs * %s' % (scan_seconds, tot_loop_points)
-                    print(ln)
-                continue
-            if print_script:
-                ln = '\t' * line_tab_pos + line
-                print(ln)
-        if print_script:
-            print('----- End Time Script: %s -----' % filename)
-            print(f'   Script total time: %s' % time_string(tot_time))
-    return datetime.timedelta(seconds=tot_time)
-
-
 def time_script_string(script_string):
     """
-    Time a script, return datetime.timedelta, updated string
+    Analyse a script and calcualte the run time by calculating scan length and number of loops.
+    :param script_string: multiline string of script
+    :return total_time: datetime.timedelta
+    :return script: updated script string
     """
     output_str = []
     tot_time = 0
@@ -310,6 +222,7 @@ def time_script_string(script_string):
     loop_points = [1]
     tab_pos = 0
     tab = "    "
+    script_string = script_string.replace('\t', tab)
     for line in script_string.splitlines():
         cmd = re_comment.sub('', line)  # remove comments
         cmd = cmd.replace("'''", '"""')
@@ -343,7 +256,7 @@ def time_script_string(script_string):
                     local_vars[var.strip()] = 0
 
                     # Tab position of line
-        line_tab_pos = eval_tabpos(cmd)
+        line_tab_pos = calc_tabpos(cmd)
         if line_tab_pos < tab_pos:
             loop_points = loop_points[:line_tab_pos+1]
         cmd = cmd.strip()
@@ -369,8 +282,25 @@ def time_script_string(script_string):
                 cmd = cmd.replace(var, '0')
             scan_seconds, scan_points = scan_command_time(cmd)
             tot_time += scan_seconds * tot_loop_points
-            output_str += [tab * line_tab_pos + orig + '  # %.4gs * %s' % (scan_seconds, tot_loop_points)]
+            print(line_tab_pos, orig)
+            output_str += [(tab * line_tab_pos) + orig + '  # %.4gs * %s' % (scan_seconds, tot_loop_points)]
             continue
         output_str += [line]
     return datetime.timedelta(seconds=float(tot_time)), '\n'.join(output_str)
 
+
+def time_script(filename, print_script=False):
+    """
+    Analyse a script and calcualte the run time by calculating scan length and number of loops.
+    :param filename: str file to open
+    :param print_script: Bool, if True, prints updated str
+    :return total_time: datetime.timedelta
+    """
+    with open(filename) as f:
+        tot_time, output_str = time_script_string(f.read())
+        if print_script:
+            print('----- Time Script: %s -----' % filename)
+            print(output_str)
+            print('----- End Time Script: %s -----' % filename)
+            print(f'   Script total time: %s' % time_string(tot_time.total_seconds()))
+    return tot_time
