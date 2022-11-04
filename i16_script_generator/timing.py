@@ -24,7 +24,7 @@ re_detector = re.compile('|'.join([r'\s%s\s+\.?\d+\.?\d*' % det for det in detec
 re_errorname = re.compile(r"'([^']*)'")
 re_lists_or_float = re.compile(r'\[.+?\]|\(.+?\)|-?\.?\d+\.?\d*')
 re_variables = re.compile(r'[a-zA-Z]\w*')
-re_assignment = re.compile(r'^\s*[\w_]+\s*=[^=]+')
+re_assignment = re.compile(r'^\s*[\w_,\s]+\s*=[^=]+')
 re_for = re.compile(r'in (.+?):')
 re_comment = re.compile(r'#.*')
 re_sleep = re.compile(r'sleep\s?\(\s*(\d+\.?\d*)|w\s?\(\s*(\d+\.?\d*)|pos\s+w\s+(\d+\.?\d*)')
@@ -59,7 +59,7 @@ def eval_range(cmd, variables=None):
     array = np.array([])
     while not success:
         try:
-            array = np.asarray(eval(cmd, local_vars)).reshape(-1)
+            array = np.asarray(eval(cmd, local_vars)) #.reshape(-1)
             success = True
         except NameError as ne:
             name = re_errorname.findall(str(ne))[0]
@@ -273,6 +273,9 @@ def time_script_string(script_string):
             else:
                 try:
                     value = value.split(';')[0]
+                    if ',' in var:  # Tuple assignemtn a,b,c = 1,2,3
+                        for tvar, tval in zip(var.split(','), value.split(',')):
+                            local_vars[tvar.strip()] = eval(tval, local_vars)
                     local_vars[var.strip()] = eval(value, local_vars)  # breaks if e.g. hkl=hkl()
                 except NameError:
                     local_vars[var.strip()] = 0

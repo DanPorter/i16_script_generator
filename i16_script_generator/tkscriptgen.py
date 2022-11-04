@@ -676,7 +676,6 @@ class ScriptGenerator:
             if replace:
                 # Replace script below top comment
                 comment_lines = top_comment_lines(self.text.get('1.0', tk.END))
-                print(comment_lines)
                 self.text.delete('%d.0' % (comment_lines + 1), tk.END)
                 self.text.insert(tk.END, script)
             else:
