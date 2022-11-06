@@ -591,9 +591,9 @@ class ScriptGenerator:
                 text.delete("insert -%d chars" % (len(line) % tabWidth), "insert")
             elif previous == " " * tabWidth:  # delete tab
                 text.delete("insert-%d chars" % tabWidth, "insert")
-            elif '\n' in previous[:-1]:  # delete spaces to start of line
+            elif '\n' in previous and previous[-1] != '\n':  # delete spaces to start of line
                 text.delete("insert-%d chars" % len(line), "insert")
-            else: # normal delete
+            else:  # normal delete
                 text.delete("insert-1 chars", "insert")
         return "break"
 

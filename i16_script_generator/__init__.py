@@ -18,9 +18,10 @@ Diamond Light Source Ltd.
 
 from i16_script_generator.tkscangen import ScanGenerator
 from i16_script_generator.tkscriptgen import ScriptGenerator
+from i16_script_generator.timing import scan_command_time, time_script_string, time_script
 
 __version__ = '1.0.0'
-__date__ = '03/11/22'
+__date__ = '06/11/22'
 
 
 def version_info():

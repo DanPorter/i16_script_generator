@@ -3,8 +3,7 @@ Script timing function for GDA
 Based on i16_script_generator by Dan Porter
 """
 
-
-import numpy as np
+import numpy as dnp
 import re
 
 SCANNABLES = {
@@ -122,6 +121,11 @@ def scannable_speed(name):
     return speed, stabilisation
 
 
+def array_round(value):
+    """Return values rounded to nearest integer, x.5 always rounds up, rather than to nearest even number"""
+    return dnp.ceil(dnp.floor(2 * dnp.asarray(value)) / 2).astype(int)
+
+
 def scan_range(start, stop=None, step=None, nsteps=None, srange=None):
     """
     Calculate scan range values given variable inputs
@@ -133,18 +137,20 @@ def scan_range(start, stop=None, step=None, nsteps=None, srange=None):
     :param srange: None or float : if none, requires 2 of stop, step, nsteps
     :return: start, stop, step, nsteps, srange
     """
-    start = np.asarray(start)
+    start = dnp.asarray(start)
     if stop is None:
         if srange is None:
-            srange = np.asarray(step) * (int(nsteps)-1)
+            srange = dnp.asarray(step) * (int(nsteps) - 1)
         stop = start + srange
     srange = stop - start
 
     if step is None:
         step = srange / (nsteps - 1)
     # nsteps = len(np.arange(start, stop+step, step))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        nsteps = int(np.nanmax(np.round((stop - start + step) / step)))
+    # with dnp.errstate(divide='ignore', invalid='ignore'):
+    #     nsteps = int(dnp.nanmax(array_round((stop - start + step) / step)))
+    # nsteps = int(dnp.nanmax(array_round((stop - start + step) / step)))
+    nsteps = round(dnp.max(dnp.abs(stop - start + step))/ dnp.max(dnp.abs(step)))
     return start, stop, step, nsteps, srange
 
 
@@ -166,7 +172,7 @@ def frange(start, stop=None, step=1):
     if stop is None:
         stop = start
         start = 0
-    return np.arange(start, stop + step, step).tolist()
+    return dnp.arange(start, stop + step, step).tolist()
 
 
 def time_string(tot_seconds):
@@ -182,15 +188,15 @@ def time_string(tot_seconds):
 
 def eval_range(cmd, variables=None):
     """Evaluate a range string, setting unknown varialbes as items in the list, returns an array"""
-    local_vars = {'frange': frange, 'dnp': np}
+    local_vars = {'frange': frange, 'dnp': dnp}
     if variables is not None:
         local_vars.update(variables)
 
     success = False
-    array = np.array([])
+    array = dnp.array([])
     while not success:
         try:
-            array = np.asarray(eval(cmd, local_vars)) #.reshape(-1)
+            array = dnp.asarray(eval(cmd, local_vars)) #.reshape(-1)
             success = True
         except NameError as ne:
             name = re_errorname.findall(str(ne))[0]
@@ -227,7 +233,7 @@ def calc_tabpos(line, tablen=4):
 
 def scan_time(nsteps, srange, exposure=1., motor_speed=1., motor_stabilisation=1.):
     """Return total scan time in seconds"""
-    return (nsteps*exposure) + (nsteps*motor_stabilisation) + np.max(srange/motor_speed)
+    return (nsteps*exposure) + (nsteps*motor_stabilisation) + dnp.max(srange / motor_speed)
 
 
 def scan_command_time(cmd, debug=False):
@@ -303,7 +309,7 @@ def time_script_string(script_string):
     bracket_count = 0
     bracket_var = ''
     bracket_str = ''
-    local_vars = {'frange': frange, 'dnp': np}
+    local_vars = {'frange': frange, 'dnp': dnp}
     loop_points = [1]
     tab = "    "
     script_string = script_string.replace('\t', tab)
@@ -361,7 +367,7 @@ def time_script_string(script_string):
             continue
 
         # pos commands
-        tot_loop_points = np.prod(loop_points)
+        tot_loop_points = dnp.prod(loop_points)
         tot_time += cmd.count('pos') * tot_loop_points
         tot_time += eval_sleep(cmd)
 
@@ -382,6 +388,8 @@ def time_script_string(script_string):
 def script_timer(filename, print_script=False):
     """
     Analyse a script and calcualte the run time by calculating scan length and number of loops.
+    This is a very simple timer and only evaluates basic scan commands and loops, it does not tell you if your script
+    will run succsefully and may be inaccurate for complex scripts.
     :param filename: str file to open
     :param print_script: Bool, if True, prints updated str
     :return total_time: datetime.timedelta
@@ -397,3 +405,5 @@ def script_timer(filename, print_script=False):
 
 if __name__ == '__main__':
     script_timer('2022_07_29_1534.py', False)
+
+    print('Should be:    11 hours, 53 mins, 28s')

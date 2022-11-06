@@ -83,8 +83,9 @@ def scan_range(start, stop=None, step=None, nsteps=None, srange=None):
     if step is None:
         step = srange / (nsteps - 1)
     # nsteps = len(np.arange(start, stop+step, step))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        nsteps = int(np.nanmax(np.round((stop - start + step) / step)))
+    # with np.errstate(divide='ignore', invalid='ignore'):
+    #     nsteps = int(np.nanmax(np.round((stop - start + step) / step)))
+    nsteps = round(np.max(np.abs(stop - start + step)) / np.max(np.abs(step)))
     return start, stop, step, nsteps, srange
 
 
