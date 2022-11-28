@@ -1,9 +1,11 @@
 """
 Script timing function for GDA
 Based on i16_script_generator by Dan Porter
+07/11/2022
 """
 
 import numpy as dnp
+#import scisoftpy as dnp
 import re
 
 SCANNABLES = {
@@ -149,8 +151,9 @@ def scan_range(start, stop=None, step=None, nsteps=None, srange=None):
     # nsteps = len(np.arange(start, stop+step, step))
     # with dnp.errstate(divide='ignore', invalid='ignore'):
     #     nsteps = int(dnp.nanmax(array_round((stop - start + step) / step)))
-    # nsteps = int(dnp.nanmax(array_round((stop - start + step) / step)))
-    nsteps = round(dnp.max(dnp.abs(stop - start + step))/ dnp.max(dnp.abs(step)))
+    # nsteps = int(dnp.nanmax(array_round((stop - start + step) / step)))  # dnp.max/ nanmax doesn't exist
+    # nsteps = round(max(dnp.abs(stop - start + step))/ max(dnp.abs(step)))  # cannot iterate over float error
+    nsteps = round(max(dnp.abs(stop - start + step).reshape(-1)) / max(dnp.abs(step).reshape(-1)))
     return start, stop, step, nsteps, srange
 
 
@@ -233,7 +236,8 @@ def calc_tabpos(line, tablen=4):
 
 def scan_time(nsteps, srange, exposure=1., motor_speed=1., motor_stabilisation=1.):
     """Return total scan time in seconds"""
-    return (nsteps*exposure) + (nsteps*motor_stabilisation) + dnp.max(srange / motor_speed)
+    srange = max(dnp.reshape(srange, -1))  # ensure srange is a float (dnp.max doesn't exist)
+    return (nsteps*exposure) + (nsteps*motor_stabilisation) + (srange / motor_speed)
 
 
 def scan_command_time(cmd, debug=False):
@@ -304,7 +308,7 @@ def time_script_string(script_string):
     :return script: updated script string
     """
     output_str = []
-    tot_time = 0
+    tot_time = 0.0
     comment_zone = False
     bracket_count = 0
     bracket_var = ''
@@ -361,15 +365,15 @@ def time_script_string(script_string):
         # For loop in line
         if cmd.startswith('for'):
             for_time, for_points = eval_for(cmd, local_vars=local_vars)
-            tot_time += for_time
+            tot_time += float(for_time)
             loop_points += [for_points]
             output_str += [tab * line_tab_pos + cmd + '  # %s points' % for_points]
             continue
 
         # pos commands
         tot_loop_points = dnp.prod(loop_points)
-        tot_time += cmd.count('pos') * tot_loop_points
-        tot_time += eval_sleep(cmd)
+        tot_time += float(cmd.count('pos') * tot_loop_points)
+        tot_time += float(eval_sleep(cmd))
 
         # scan commands
         if 'scan' in cmd:
@@ -378,11 +382,11 @@ def time_script_string(script_string):
             for var in local_vars:
                 cmd = cmd.replace(var, '0')
             scan_seconds, scan_points = scan_command_time(cmd)
-            tot_time += scan_seconds * tot_loop_points
+            tot_time += float(scan_seconds * tot_loop_points)
             output_str += [(tab * line_tab_pos) + orig + '  # %.4gs * %s' % (scan_seconds, tot_loop_points)]
             continue
         output_str += [line]
-    return float(tot_time), '\n'.join(output_str)
+    return tot_time, '\n'.join(output_str)
 
 
 def script_timer(filename, print_script=False):
@@ -392,7 +396,7 @@ def script_timer(filename, print_script=False):
     will run succsefully and may be inaccurate for complex scripts.
     :param filename: str file to open
     :param print_script: Bool, if True, prints updated str
-    :return total_time: datetime.timedelta
+    :return total_time: float
     """
     with open(filename) as f:
         tot_time, output_str = time_script_string(f.read())
@@ -400,10 +404,13 @@ def script_timer(filename, print_script=False):
             print('----- Time Script: %s -----' % filename)
             print(output_str)
             print('----- End Time Script: %s -----' % filename)
-        print(f'   Script total time: %s' % time_string(tot_time))
+        print('   Predicted script time: %s' % time_string(tot_time))
+    return tot_time
 
 
 if __name__ == '__main__':
     script_timer('2022_07_29_1534.py', False)
-
     print('Should be:    11 hours, 53 mins, 28s')
+
+    script_timer('2022_11_24_CoTi2O5_night.py', False)
+    print('Should be:    12 hours, 22 mins, 46s')

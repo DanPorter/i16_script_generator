@@ -1,0 +1,7 @@
+i16_script_generator
+ToDo List
+
+28/11/2022 - Find fault in script 2022_11_24_CoTi2O5_night.py in GDA
+28/11/2022 - Stop text wrapping in editor, add scroll bars
+28/11/2022 - Add line numbers to editor
+28/11/2022 - Add line highlighting in editor
